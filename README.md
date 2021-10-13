@@ -5,5 +5,5 @@ A reinforcement learning environment built with pygame
 - Add state variable information
 - Add electricity price distribution
 - Follow a normal distribuition for traffic load
-- Implement the agent using openai gym and pytorch
+- Implement the agent using openAI Gym and PyTorch
    
