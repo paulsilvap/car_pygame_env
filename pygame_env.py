@@ -2,8 +2,8 @@ import pygame
 from sys import exit
 import random
 
-WINDOW_HEIGHT = int(400 * 1)
-WINDOW_WIDTH = int(800 * 1)
+WINDOW_HEIGHT = int(400 * 2)
+WINDOW_WIDTH = int(WINDOW_HEIGHT * 2)
 GRID_HEIGHT = WINDOW_HEIGHT
 GRID_WIDTH = int(WINDOW_WIDTH / 2)
 BLOCK_SIZE = int(50 * 1)
@@ -37,7 +37,6 @@ car_rect = car_surface.get_rect(center = (GRID_WIDTH + BLOCK_SIZE + (BLOCK_SIZE/
 subsurface1.fill('Gray')
 subsurface2.fill('Gray')
 drawGrid(subsurface2, BLOCK_SIZE)
-# pygame.draw.rect(subsurface2, 'white', car_rect)
 
 while True:
     for event in pygame.event.get():
@@ -65,7 +64,7 @@ while True:
         pygame.draw.rect(screen, 'Black', rect, 1)
 
     screen.blit(subsurface1, (0,0))
-    screen.blit(subsurface2, (400,0))
+    screen.blit(subsurface2, (GRID_WIDTH,0))
 
     screen.blit(car_surface,car_rect)
 
