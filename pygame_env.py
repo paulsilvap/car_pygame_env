@@ -61,7 +61,7 @@ while True:
                 car_rect.right += BLOCK_SIZE
 
     for (rect, _) in grids:
-        pygame.draw.rect(screen, 'Black', rect, 1)
+        pygame.draw.rect(subsurface2, 'Black', rect, 1)
 
     screen.blit(subsurface1, (0,0))
     screen.blit(subsurface2, (GRID_WIDTH,0))
