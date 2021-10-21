@@ -2,6 +2,9 @@ import pygame
 import pygame.freetype
 from sys import exit
 import random
+from pygame.sprite import Group
+from scipy.stats import truncnorm
+import numpy as np
 
 WINDOW_HEIGHT = int(400 * 1)
 WINDOW_WIDTH = int(WINDOW_HEIGHT * 2)
@@ -11,12 +14,22 @@ BLOCK_SIZE = int(50 * 1)
 COLORS = [(255,255,204),(255,204,153),(255,102,102)]
 GRID_DIMENSION = int((GRID_HEIGHT - BLOCK_SIZE*2) / BLOCK_SIZE)
 BATTERY_LEVEL = 24
-ELECTRICTY_PRICE = 0.45
 
 grids = []
 steps = 0
 charging = False
 charging_cost = 0
+
+def truncatedNormalDistribution(bound_a, bound_b, mean, std, step):
+    a, b = (bound_a - mean) / std, (bound_b - mean) / std
+    x_range = np.linspace(bound_a, bound_b, int(((bound_b - bound_a)/step)+1))
+
+    p = truncnorm.pdf(x_range, a, b, loc = mean, scale = std)
+    sum_p = sum(p)
+    p_norm = [i/sum_p for i in p]
+    # p_norm = [round(i/sum_p,6) for i in p]
+
+    return round(np.random.choice(x_range,size = 1, p=p_norm)[0],2)
 
 def drawString(font, str, surf, pos, color):
     text_rect = font.get_rect(str)
@@ -24,10 +37,10 @@ def drawString(font, str, surf, pos, color):
     font.render_to(surf, text_rect, str, color)
     return text_rect.bottom
 
-def drawGrid(screen, blockSize):
-    for x in range(blockSize, GRID_WIDTH-blockSize, blockSize):
-        for y in range(blockSize, GRID_HEIGHT-blockSize, blockSize):
-            rect = pygame.Rect(x, y, blockSize, blockSize)
+def drawGrid(screen, block_size):
+    for x in range(block_size, GRID_WIDTH-block_size, block_size):
+        for y in range(block_size, GRID_HEIGHT-block_size, block_size):
+            rect = pygame.Rect(x, y, block_size, block_size)
             index = random.randint(0,2)
             grids.append([rect, index])
             pygame.draw.rect(screen, COLORS[index], rect)
@@ -35,6 +48,25 @@ def drawGrid(screen, blockSize):
 def updateLoad():
     for i in range(len(grids)):
         grids[i][1] = random.randint(0,2)
+
+def getPosition(center, block_size, dim):
+    x, y = center
+    row = (y-block_size/2)/block_size
+    col = (x-block_size/2)/block_size
+    return int((col * dim - dim) + row - 1)
+
+def getLoad(pos, dim, dir):
+    if pos % dim != 0 and dir == "n": 
+        load = grids[pos-1][1]
+    elif pos + dim <= (dim ** 2) - 1 and dir == "e":
+        load = grids[pos + dim][1]
+    elif pos % dim != dim - 1 and dir == "s":
+        load = grids[pos+1][1]
+    elif pos - dim >= 0 and dir == "w": 
+        load = grids[pos - dim][1]
+    else:
+        load = "none"
+    return 'low' if load == 0 else 'mid' if load == 1 else 'high' if load == 2 else load
 
 pygame.init()
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -63,6 +95,8 @@ car_rect = car_surface.get_rect(center = grids[GRID_DIMENSION-1][0].center)
 charger_rect = charger_surface.get_rect(center = grids[GRID_DIMENSION*(GRID_DIMENSION-1)][0].center)
 charging_rect = charging_surface.get_rect(center = grids[GRID_DIMENSION*(GRID_DIMENSION-1)][0].center)
 bat = BATTERY_LEVEL
+price = truncatedNormalDistribution(0.40, 0.90, 0.50, 0.10, 0.01)
+car_pos = getPosition(car_rect.center,BLOCK_SIZE, GRID_DIMENSION)
 
 while True:
     for event in pygame.event.get():
@@ -73,6 +107,7 @@ while True:
         if game_active:
             if event.type == pygame.KEYDOWN:
                 steps += 1
+                price = truncatedNormalDistribution(0.40, 0.90, 0.50, 0.10, 0.01)
                 if steps % 5 == 0:
                     updateLoad()
                 for (rect, index) in grids:
@@ -91,7 +126,7 @@ while True:
                     bat -= 1
                 if event.key == pygame.K_c and car_rect.center == charger_rect.center:
                     charging = True
-                    charging_cost += ELECTRICTY_PRICE 
+                    charging_cost += price 
                     bat = min(BATTERY_LEVEL, int(bat + BATTERY_LEVEL*0.25))
                 else:
                     charging = False
@@ -110,11 +145,18 @@ while True:
         for (rect, _) in grids:
             pygame.draw.rect(subsurface2, 'Black', rect, 1)
         
+        car_pos = getPosition(car_rect.center,BLOCK_SIZE, GRID_DIMENSION)
+
         subsurface1.fill('Gray')
         drawString(test_font,f'Battery: {bat}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE), (63,63,63))
         drawString(test_font,f'Steps: {steps}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*3/2), (63,63,63))
-        drawString(test_font,f'Electricity Price: $ {ELECTRICTY_PRICE} kw/h', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*2), (63,63,63))
+        drawString(test_font,f'Electricity Price: $ {price:.2f} kw/h', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*2), (63,63,63))
         drawString(test_font,f'Charging Cost: $ {charging_cost:.2f}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*5/2), (63,63,63))
+        drawString(test_font,f'Load', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*7/2), (63,63,63))
+        drawString(test_font,f'North: {getLoad(car_pos, GRID_DIMENSION, "n")}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*4), (63,63,63))
+        drawString(test_font,f'East: {getLoad(car_pos, GRID_DIMENSION, "e")}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*9/2), (63,63,63))
+        drawString(test_font,f'South: {getLoad(car_pos, GRID_DIMENSION, "s")}', subsurface1, (GRID_WIDTH/2,BLOCK_SIZE*4), (63,63,63))
+        drawString(test_font,f'West: {getLoad(car_pos, GRID_DIMENSION, "w")}', subsurface1, (GRID_WIDTH/2,BLOCK_SIZE*9/2), (63,63,63))
 
         screen.blit(subsurface1, (0,0))
         screen.blit(subsurface2, (GRID_WIDTH,0))
