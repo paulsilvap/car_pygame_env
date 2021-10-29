@@ -19,6 +19,8 @@ grids = []
 steps = 0
 charging = False
 charging_cost = 0
+mid_penalty = 1
+high_penalty = 2
 
 def truncatedNormalDistribution(bound_a, bound_b, mean, std, step):
     a, b = (bound_a - mean) / std, (bound_b - mean) / std
@@ -33,9 +35,8 @@ def truncatedNormalDistribution(bound_a, bound_b, mean, std, step):
 
 def drawString(font, str, surf, pos, color):
     text_rect = font.get_rect(str)
-    text_rect.midleft = pos
+    text_rect.bottomleft = pos
     font.render_to(surf, text_rect, str, color)
-    return text_rect.bottom
 
 def drawGrid(screen, block_size):
     for x in range(block_size, GRID_WIDTH-block_size, block_size):
@@ -64,9 +65,42 @@ def getLoad(pos, dim, dir):
         load = grids[pos+1][1]
     elif pos - dim >= 0 and dir == "w": 
         load = grids[pos - dim][1]
+    elif dir == "c":
+        load = grids[pos][1]
     else:
         load = "none"
+    return load
+
+def loadToText(load):
     return 'low' if load == 0 else 'mid' if load == 1 else 'high' if load == 2 else load
+
+def actions(event, car_rect, bat, steps, charging_cost, charging):
+    if event.key == pygame.K_UP and car_rect.top > BLOCK_SIZE * 2:
+        car_rect.top -= BLOCK_SIZE
+        bat = max(0, bat - BATTERY_LEVEL * 0.015)
+        steps += 1
+    elif event.key == pygame.K_DOWN and car_rect.bottom < GRID_HEIGHT - BLOCK_SIZE * 2:
+        car_rect.bottom += BLOCK_SIZE
+        bat = max(0, bat - BATTERY_LEVEL * 0.015)
+        steps += 1
+    elif event.key == pygame.K_LEFT and car_rect.left > BLOCK_SIZE * 2:
+        car_rect.left -= BLOCK_SIZE
+        bat = max(0, bat - BATTERY_LEVEL * 0.015)
+        steps += 1
+    elif event.key == pygame.K_RIGHT and car_rect.right < (GRID_WIDTH) - BLOCK_SIZE * 2:
+        car_rect.right += BLOCK_SIZE
+        bat = max(0, bat - BATTERY_LEVEL * 0.015)
+        steps += 1
+    if event.key == pygame.K_c and car_rect.center == charger_rect.center:
+        charging = True
+        charging_cost += price * 0.1
+        bat = min(BATTERY_LEVEL, bat + BATTERY_LEVEL*0.025)
+        steps += 1
+    else:
+        charging = False
+    if event.key == pygame.K_p:
+        steps += 1
+    return car_rect, bat, steps, charging_cost, charging
 
 pygame.init()
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -94,7 +128,7 @@ drawGrid(subsurface2, BLOCK_SIZE)
 car_rect = car_surface.get_rect(center = grids[GRID_DIMENSION-1][0].center)
 charger_rect = charger_surface.get_rect(center = grids[GRID_DIMENSION*(GRID_DIMENSION-1)][0].center)
 charging_rect = charging_surface.get_rect(center = grids[GRID_DIMENSION*(GRID_DIMENSION-1)][0].center)
-bat = BATTERY_LEVEL
+bat = truncatedNormalDistribution(5, 15, 10, 1, 1)
 price = truncatedNormalDistribution(0.40, 0.90, 0.50, 0.10, 0.01)
 car_pos = getPosition(car_rect.center,BLOCK_SIZE, GRID_DIMENSION)
 
@@ -106,30 +140,33 @@ while True:
 
         if game_active:
             if event.type == pygame.KEYDOWN:
-                steps += 1
-                price = truncatedNormalDistribution(0.40, 0.90, 0.50, 0.10, 0.01)
-                if steps % 5 == 0:
+                if steps != 0 and steps % 10 == 0:
+                    price = truncatedNormalDistribution(0.40, 0.90, 0.50, 0.10, 0.01)
+                if steps != 0 and steps % 5 == 0:
                     updateLoad()
                 for (rect, index) in grids:
                     pygame.draw.rect(subsurface2, COLORS[index], rect)
-                if event.key == pygame.K_UP and car_rect.top > BLOCK_SIZE * 2:
-                    car_rect.top -= BLOCK_SIZE
-                    bat -= 1
-                elif event.key == pygame.K_DOWN and car_rect.bottom < GRID_HEIGHT - BLOCK_SIZE * 2:
-                    car_rect.bottom += BLOCK_SIZE
-                    bat -= 1
-                elif event.key == pygame.K_LEFT and car_rect.left > BLOCK_SIZE * 2:
-                    car_rect.left -= BLOCK_SIZE
-                    bat -= 1
-                elif event.key == pygame.K_RIGHT and car_rect.right < (GRID_WIDTH) - BLOCK_SIZE * 2:
-                    car_rect.right += BLOCK_SIZE
-                    bat -= 1
-                if event.key == pygame.K_c and car_rect.center == charger_rect.center:
-                    charging = True
-                    charging_cost += price 
-                    bat = min(BATTERY_LEVEL, int(bat + BATTERY_LEVEL*0.25))
+                current_load = getLoad(car_pos, GRID_DIMENSION, "c")
+                if current_load == 1:
+                    if mid_penalty == 0:
+                        car_rect, bat, steps, charging_cost, charging = actions(event, car_rect, bat, steps, charging_cost, charging)
+                        mid_penalty = 1
+                        high_penalty = 2
+                    else:
+                        mid_penalty -= 1
+                        high_penalty -= 1
+                        steps += 1
+                elif current_load == 2:
+                    if high_penalty == 0:
+                        car_rect, bat, steps, charging_cost, charging = actions(event, car_rect, bat, steps, charging_cost, charging)
+                        high_penalty = 2
+                        mid_penalty = 1
+                    else:
+                        high_penalty -= 1
+                        mid_penalty = max (0, mid_penalty - 1)
+                        steps += 1
                 else:
-                    charging = False
+                    car_rect, bat, steps, charging_cost, charging = actions(event, car_rect, bat, steps, charging_cost, charging)
         else:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
@@ -137,7 +174,7 @@ while True:
                     for (rect, index) in grids:
                         pygame.draw.rect(subsurface2, COLORS[index], rect)
                     game_active = True
-                    bat = BATTERY_LEVEL
+                    bat = truncatedNormalDistribution(5, 15, 10, 1, 1)
                     steps = 0
                     car_rect.center = grids[GRID_DIMENSION-1][0].center
 
@@ -148,15 +185,18 @@ while True:
         car_pos = getPosition(car_rect.center,BLOCK_SIZE, GRID_DIMENSION)
 
         subsurface1.fill('Gray')
-        drawString(test_font,f'Battery: {bat}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE), (63,63,63))
+        drawString(test_font,f'SOC: {(bat/BATTERY_LEVEL):.2f}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE), (63,63,63))
         drawString(test_font,f'Steps: {steps}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*3/2), (63,63,63))
         drawString(test_font,f'Electricity Price: $ {price:.2f} kw/h', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*2), (63,63,63))
-        drawString(test_font,f'Charging Cost: $ {charging_cost:.2f}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*5/2), (63,63,63))
+        drawString(test_font,f'Total Cost: $ {charging_cost:.2f}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*5/2), (63,63,63))
         drawString(test_font,f'Load', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*7/2), (63,63,63))
-        drawString(test_font,f'North: {getLoad(car_pos, GRID_DIMENSION, "n")}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*4), (63,63,63))
-        drawString(test_font,f'East: {getLoad(car_pos, GRID_DIMENSION, "e")}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*9/2), (63,63,63))
-        drawString(test_font,f'South: {getLoad(car_pos, GRID_DIMENSION, "s")}', subsurface1, (GRID_WIDTH/2,BLOCK_SIZE*4), (63,63,63))
-        drawString(test_font,f'West: {getLoad(car_pos, GRID_DIMENSION, "w")}', subsurface1, (GRID_WIDTH/2,BLOCK_SIZE*9/2), (63,63,63))
+        drawString(test_font,f'N: {loadToText(getLoad(car_pos, GRID_DIMENSION, "n"))}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*4), (63,63,63))
+        drawString(test_font,f'E: {loadToText(getLoad(car_pos, GRID_DIMENSION, "e"))}', subsurface1, (BLOCK_SIZE,BLOCK_SIZE*9/2), (63,63,63))
+        drawString(test_font,f'S: {loadToText(getLoad(car_pos, GRID_DIMENSION, "s"))}', subsurface1, (GRID_WIDTH/2,BLOCK_SIZE*4), (63,63,63))
+        drawString(test_font,f'W: {loadToText(getLoad(car_pos, GRID_DIMENSION, "w"))}', subsurface1, (GRID_WIDTH/2,BLOCK_SIZE*9/2), (63,63,63))
+        drawString(test_font,f'Penalties', subsurface1, (BLOCK_SIZE, BLOCK_SIZE*11/2), (63,63,63))
+        drawString(test_font,f'medium {mid_penalty}', subsurface1, (BLOCK_SIZE, BLOCK_SIZE*6), (63,63,63))
+        drawString(test_font,f'high {high_penalty}', subsurface1, (GRID_WIDTH/2, BLOCK_SIZE*6), (63,63,63))
 
         screen.blit(subsurface1, (0,0))
         screen.blit(subsurface2, (GRID_WIDTH,0))
@@ -167,12 +207,9 @@ while True:
             subsurface2.blit(charging_surface, charging_rect)
         else:
             subsurface2.blit(car_surface,car_rect)
-        if (bat == 0 and car_rect.center != charger_rect.center) or steps == 240:
+        if (bat <= 0 and car_rect.center != charger_rect.center) or steps == 240:
             game_active = False
     else:
         screen.blit(subsurface2, (GRID_WIDTH,0))
-        # pass
         
     pygame.display.update()
-
-
