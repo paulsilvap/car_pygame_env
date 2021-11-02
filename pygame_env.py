@@ -2,8 +2,6 @@ import pygame
 from pygame.constants import K_LEFT, K_RIGHT
 import pygame.freetype
 from sys import exit
-import random
-from pygame.sprite import Group
 from scipy.stats import truncnorm
 import numpy as np
 
@@ -45,13 +43,16 @@ def drawGrid(screen, block_size):
     for x in range(block_size, GRID_WIDTH-block_size, block_size):
         for y in range(block_size, GRID_HEIGHT-block_size, block_size):
             rect = pygame.Rect(x, y, block_size, block_size)
-            index = random.randint(0,2)
+            index = int(truncatedNormalDistribution(0,2,1,1,1))
+            if (y == GRID_HEIGHT-block_size*2 and x == block_size) or (x == GRID_WIDTH-block_size*2 and y == block_size):
+                index = 0
             grids.append([rect, index])
             pygame.draw.rect(screen, COLORS[index], rect)
 
 def updateLoad():
     for i in range(len(grids)):
-        grids[i][1] = random.randint(0,2)
+        grids[i][1] = int(truncatedNormalDistribution(0,2,1,1,1))
+    grids[GRID_DIMENSION-1][1] = grids[GRID_DIMENSION*(GRID_DIMENSION-1)][1] = 0
 
 def getPosition(center, block_size, dim):
     x, y = center
@@ -122,13 +123,21 @@ charger_surface = pygame.transform.scale(charger_surface,(int(BLOCK_SIZE*0.75), 
 # Green charging icon taken from: https://uxwing.com/green-energy-icon/
 charging_surface = pygame.image.load('green-energy.png').convert_alpha()
 charging_surface = pygame.transform.scale(charging_surface,(int(BLOCK_SIZE*0.75), int(BLOCK_SIZE*0.75)))
+# House icon taken from: https://uxwing.com/home-address-icon/
+house_surface = pygame.image.load('home.png').convert_alpha()
+house_surface = pygame.transform.scale(house_surface,(int(BLOCK_SIZE*0.75), int(BLOCK_SIZE*0.75)))
+# Car in home icon taken https://uxwing.com/house-window-icon/
+in_house_surface = pygame.image.load('house.png').convert_alpha()
+in_house_surface = pygame.transform.scale(in_house_surface,(int(BLOCK_SIZE*0.75), int(BLOCK_SIZE*0.75)))
 
 subsurface2.fill('Gray')
 drawGrid(subsurface2, BLOCK_SIZE)
 car_rect = car_surface.get_rect(center = grids[GRID_DIMENSION-1][0].center)
 charger_rect = charger_surface.get_rect(center = grids[GRID_DIMENSION*(GRID_DIMENSION-1)][0].center)
 charging_rect = charging_surface.get_rect(center = grids[GRID_DIMENSION*(GRID_DIMENSION-1)][0].center)
-bat = truncatedNormalDistribution(5, 15, 10, 1, 1)
+house_rect = house_surface.get_rect(center = grids[GRID_DIMENSION-1][0].center)
+in_house_rect = in_house_surface.get_rect(center = grids[GRID_DIMENSION-1][0].center)
+init_bat = bat = truncatedNormalDistribution(5, 15, 10, 1, 1)
 price = truncatedNormalDistribution(0.40, 0.90, 0.50, 0.10, 0.01)
 car_pos = getPosition(car_rect.center,BLOCK_SIZE, GRID_DIMENSION)
 
@@ -185,7 +194,7 @@ while True:
                     for (rect, index) in grids:
                         pygame.draw.rect(subsurface2, COLORS[index], rect)
                     game_active = True
-                    bat = truncatedNormalDistribution(5, 15, 10, 1, 1)
+                    init_bat = bat = truncatedNormalDistribution(5, 15, 10, 1, 1)
                     steps = 0
                     car_rect.center = grids[GRID_DIMENSION-1][0].center
 
@@ -208,17 +217,25 @@ while True:
         drawString(test_font,f'Penalty Counter: {penalties}', subsurface1, (BLOCK_SIZE, BLOCK_SIZE*11/2), (63,63,63))
         drawString(test_font,f'Total distance: {traveled_distance} km', subsurface1, (BLOCK_SIZE, BLOCK_SIZE*6), (63,63,63))
 
-        screen.blit(subsurface1, (0,0))
-        screen.blit(subsurface2, (GRID_WIDTH,0))
-
         if car_rect.center != charger_rect.center:
             subsurface2.blit(charger_surface, charger_rect)
         if car_rect.center == charger_rect.center and charging:
+            subsurface2.blit(house_surface, house_rect)
             subsurface2.blit(charging_surface, charging_rect)
+        elif car_rect.center == house_rect.center:
+            subsurface2.blit(in_house_surface, house_rect)
         else:
+            subsurface2.blit(house_surface, house_rect)
             subsurface2.blit(car_surface,car_rect)
-        if (bat <= 0 and car_rect.center != charger_rect.center) or steps == 240:
+        if (bat <= 0 and car_rect.center != charger_rect.center) or steps == 240 or (bat > init_bat and car_rect.center == in_house_rect.center):
+            if (bat > init_bat and car_rect.center == in_house_rect.center):
+                drawString(test_font,f'You won!!', subsurface1, (BLOCK_SIZE, BLOCK_SIZE*7), (0,0,200))
+            else:
+                drawString(test_font,f'You lost!!', subsurface1, (BLOCK_SIZE, BLOCK_SIZE*7), (200,0,0))
             game_active = False
+        
+        screen.blit(subsurface1, (0,0))
+        screen.blit(subsurface2, (GRID_WIDTH,0))
     else:
         screen.blit(subsurface2, (GRID_WIDTH,0))
         
